@@ -10,35 +10,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGojqTransformReturnsJson(t *testing.T) {
-	testJson := bytes.NewBufferString(`{"foo": "bar", "baz": "qux"}`)
+func TestGojqTransformer_TransformReturnsJson(t *testing.T) {
+	content := `{"foo": "bar", "baz": "qux"}`
+	testJson := bytes.NewBufferString(content)
 
 	transformer := NewGojqTransformer()
 	transformer.Query = "{test: .foo, test2: .baz, arbitary: \"waldo\"}"
 	ctx := context.Background()
 
-	transformed, err := transformer.Transform(ctx, testJson)
-	if err != nil {
-		t.Errorf("Error transforming JSON: %s", err)
-	}
+	got, err := transformer.Transform(ctx, testJson)
+	assert.NoError(t, err)
 
-	compare := testutils.NewTestJson(testutils.ReaderToString(transformed), `{"test":"bar", "test2":"qux", "arbitary":"waldo"}`)
-	err = compare.Compare()
+	want := `{"test": "bar", "test2": "qux", "arbitary": "waldo"}`
+	err = testutils.NewTestJson(got, bytes.NewBufferString(want)).Compare()
 	assert.NoError(t, err)
 }
 
-func TestNilTransformerReturnsOriginalObject(t *testing.T) {
-	testJson := bytes.NewBufferString(`{"foo": "bar", "baz": "qux"}`)
+func TestNilTransformer_TransformReturnsOriginalObject(t *testing.T) {
+	content := `{"foo": "bar", "baz": "qux"}`
+	testJson := bytes.NewBufferString(content)
 
 	transformer := NewNilTransformer()
 
-	transformed, err := transformer.Transform(context.Background(), testJson)
-	if err != nil {
-		t.Errorf("Error transforming JSON: %s", err)
-	}
+	got, err := transformer.Transform(context.Background(), testJson)
+	assert.NoError(t, err)
 
-	compare := testutils.NewTestJson(testutils.ReaderToString(transformed), `{"foo":"bar", "baz":"qux"}`)
-	err = compare.Compare()
+	want := content
+	err = testutils.NewTestJson(got, bytes.NewBufferString(want)).Compare()
 	assert.NoError(t, err)
 }
 

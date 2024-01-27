@@ -1,83 +1,50 @@
 package testutils
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"reflect"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 type TestJson struct {
-	parsedActual   interface{}
-	parsedExpected interface{}
-	Actual         string
-	Expected       string
+	ParsedGot  interface{}
+	ParsedWant interface{}
+	Got        io.Reader
+	Want       io.Reader
 }
 
-func NewTestJson(actual, expected string) *TestJson {
+func NewTestJson(actual, expected io.Reader) *TestJson {
 	return &TestJson{
-		Actual:   actual,
-		Expected: expected,
+		Got:  actual,
+		Want: expected,
 	}
-}
-
-func (t *TestJson) Parse() error {
-	if err := json.Unmarshal([]byte(t.Actual), &t.parsedActual); err != nil {
-		return fmt.Errorf("error parsing actual JSON: %w", err)
-	}
-
-	if err := json.Unmarshal([]byte(t.Expected), &t.parsedExpected); err != nil {
-		return fmt.Errorf("error parsing expected JSON: %w", err)
-	}
-
-	return nil
-}
-
-func ReaderToString(r io.Reader) string {
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(r)
-	return buf.String()
 }
 
 func (t *TestJson) Compare() error {
-	if err := t.Parse(); err != nil {
+	err := t.Parse()
+	if err != nil {
 		return err
 	}
 
-	if !jsonEqual(t.parsedActual, t.parsedExpected) {
-		pretty, err := t.prettyPrint()
-		if err != nil {
-			pretty = err.Error()
-		}
-
-		return fmt.Errorf("actual JSON does not match expected JSON. %s", pretty)
+	if diff := cmp.Diff(t.ParsedWant, t.ParsedGot); diff != "" {
+		return fmt.Errorf("JSON mismatch (-want +got):\n%s", diff)
 	}
 
 	return nil
 }
 
-func (t *TestJson) prettyPrint() (string, error) {
-	if t.Actual == "" || t.Expected == "" {
-		err := t.Parse()
-		if err != nil {
-			return "", fmt.Errorf("error parsing JSON: %w", err)
-		}
-	}
-
-	actualBytes, err := json.MarshalIndent(t.parsedActual, "", "  ")
+func (t *TestJson) Parse() error {
+	err := json.NewDecoder(t.Got).Decode(&t.ParsedGot)
 	if err != nil {
-		return "", fmt.Errorf("error marshalling actual JSON: %w", err)
+		return fmt.Errorf("error parsing got JSON: %w", err)
 	}
 
-	expectedBytes, err := json.MarshalIndent(t.parsedExpected, "", "  ")
+	err = json.NewDecoder(t.Want).Decode(&t.ParsedWant)
 	if err != nil {
-		return "", fmt.Errorf("error marshalling expected JSON: %w", err)
+		return fmt.Errorf("error parsing want JSON: %w", err)
 	}
 
-	return fmt.Sprintf("Actual:\n%s\nExpected:\n%s", string(actualBytes), string(expectedBytes)), nil
-}
-
-func jsonEqual(a, b interface{}) bool {
-	return reflect.DeepEqual(a, b)
+	return nil
 }

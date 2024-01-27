@@ -3,6 +3,7 @@ module chain
 go 1.21.6
 
 require (
+	github.com/google/go-cmp v0.6.0
 	github.com/itchyny/gojq v0.12.14
 	github.com/stretchr/testify v1.8.4
 )
