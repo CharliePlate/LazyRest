@@ -26,8 +26,10 @@ type GojqTransformer struct {
 	Query   string
 }
 
-func NewGojqTransformer() *GojqTransformer {
-	return &GojqTransformer{}
+func NewGojqTransformer(query string) *GojqTransformer {
+	return &GojqTransformer{
+		Query: query,
+	}
 }
 
 // Transform executes a gojq query on the given JSON input and ensures only a single result is produced.
@@ -45,14 +47,14 @@ func (jq *GojqTransformer) Transform(ctx context.Context, body io.Reader) (io.Re
 
 	iter := query.RunWithContext(ctx, jsonData)
 
-	var output bytes.Buffer
+	var buffer bytes.Buffer
 	for {
 		v, ok := iter.Next()
 		if !ok {
 			break
 		}
 
-		if output.Len() > 0 {
+		if buffer.Len() > 0 {
 			return nil, errors.New("gojq query returned more than one result")
 		}
 
@@ -60,15 +62,24 @@ func (jq *GojqTransformer) Transform(ctx context.Context, body io.Reader) (io.Re
 			return nil, err
 		}
 
-		jsonOutput, err := json.Marshal(v)
+		// handle strings because jq will return it surrounded in ""
+		jsonData, err := json.Marshal(v)
 		if err != nil {
 			return nil, err
 		}
 
-		output.Write(jsonOutput)
+		if jsonData[0] == '"' && jsonData[len(jsonData)-1] == '"' {
+			var resultString string
+			if err := json.Unmarshal(jsonData, &resultString); err != nil {
+				return nil, err
+			}
+			buffer.WriteString(resultString)
+		} else {
+			buffer.Write(jsonData)
+		}
 	}
 
-	return &output, nil
+	return &buffer, nil
 }
 
 type NilTransformer struct{}
