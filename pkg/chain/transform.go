@@ -26,7 +26,7 @@ type GojqTransformer struct {
 	Query   string
 }
 
-func NewGojq() *GojqTransformer {
+func NewGojqTransformer() *GojqTransformer {
 	return &GojqTransformer{}
 }
 
@@ -73,10 +73,10 @@ func (jq *GojqTransformer) Transform(ctx context.Context, body io.Reader) (io.Re
 
 type NilTransformer struct{}
 
-func NewNil() *NilTransformer {
+func NewNilTransformer() *NilTransformer {
 	return &NilTransformer{}
 }
 
-func (nt *NilTransformer) Transform(ctx context.Context, body *io.Reader) (*io.Reader, error) {
+func (nt *NilTransformer) Transform(ctx context.Context, body io.Reader) (io.Reader, error) {
 	return body, nil
 }

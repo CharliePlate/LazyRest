@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"chain/internal/testutils"
 	"context"
-	"io"
 	"os"
 	"testing"
 
@@ -14,26 +13,32 @@ import (
 func TestGojqTransformReturnsJson(t *testing.T) {
 	testJson := bytes.NewBufferString(`{"foo": "bar", "baz": "qux"}`)
 
-	transformer := NewGojq()
+	transformer := NewGojqTransformer()
 	transformer.Query = "{test: .foo, test2: .baz, arbitary: \"waldo\"}"
 	ctx := context.Background()
 
-	output, err := transformer.Transform(ctx, testJson)
+	transformed, err := transformer.Transform(ctx, testJson)
 	if err != nil {
 		t.Errorf("Error transforming JSON: %s", err)
 	}
 
-	outputStr, err := io.ReadAll(output)
+	compare := testutils.NewTestJson(testutils.ReaderToString(transformed), `{"test":"bar", "test2":"qux", "arbitary":"waldo"}`)
+	err = compare.Compare()
+	assert.NoError(t, err)
+}
+
+func TestNilTransformerReturnsOriginalObject(t *testing.T) {
+	testJson := bytes.NewBufferString(`{"foo": "bar", "baz": "qux"}`)
+
+	transformer := NewNilTransformer()
+
+	transformed, err := transformer.Transform(context.Background(), testJson)
 	if err != nil {
-		t.Errorf("Error reading output: %s", err)
+		t.Errorf("Error transforming JSON: %s", err)
 	}
 
-	test := testutils.TestJson{
-		Actual:   string(outputStr),
-		Expected: `{"test":"bar", "test2":"qux", "arbitary":"waldo"}`,
-	}
-
-	err = test.Compare()
+	compare := testutils.NewTestJson(testutils.ReaderToString(transformed), `{"foo":"bar", "baz":"qux"}`)
+	err = compare.Compare()
 	assert.NoError(t, err)
 }
 

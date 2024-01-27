@@ -1,8 +1,10 @@
 package testutils
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"reflect"
 )
 
@@ -30,6 +32,12 @@ func (t *TestJson) Parse() error {
 	}
 
 	return nil
+}
+
+func ReaderToString(r io.Reader) string {
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(r)
+	return buf.String()
 }
 
 func (t *TestJson) Compare() error {
