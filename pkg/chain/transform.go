@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"os/exec"
 
 	"github.com/itchyny/gojq"
 )
@@ -90,4 +92,77 @@ func NewNilTransformer() *NilTransformer {
 
 func (nt *NilTransformer) Transform(ctx context.Context, body io.Reader) (io.Reader, error) {
 	return body, nil
+}
+
+type CustomScriptTransformer struct {
+	Script string
+	Args   []string
+}
+
+func NewCustomScriptTransformer(script string, args ...string) *CustomScriptTransformer {
+	return &CustomScriptTransformer{Script: script, Args: args}
+}
+
+func (cs *CustomScriptTransformer) setupCommand(ctx context.Context) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+	cmd := exec.CommandContext(ctx, cs.Script, cs.Args...)
+	stdinPipe, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	stderrPipe, err := cmd.StderrPipe() // Capture stderr
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	return cmd, stdinPipe, stdoutPipe, stderrPipe, nil
+}
+
+func (cs *CustomScriptTransformer) Transform(ctx context.Context, body io.Reader) (io.Reader, error) {
+	b, err := io.ReadAll(body)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd, stdinPipe, stdoutPipe, stderrPipe, err := cs.setupCommand(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	_, err = stdinPipe.Write(b)
+	if err != nil {
+		return nil, err
+	}
+	stdinPipe.Close()
+
+	stdout, err := io.ReadAll(stdoutPipe)
+	if err != nil {
+		return nil, err
+	}
+	stdoutPipe.Close()
+
+	stderr, err := io.ReadAll(stderrPipe)
+	if err != nil {
+		return nil, err
+	}
+	stderrPipe.Close()
+
+	if len(stderr) > 0 {
+		return nil, fmt.Errorf("command stderr: %s", string(stderr))
+	}
+
+	if err := cmd.Wait(); err != nil {
+		return nil, err
+	}
+
+	return bytes.NewReader(stdout), nil
 }

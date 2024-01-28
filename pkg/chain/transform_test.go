@@ -8,48 +8,99 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestGojqTransformer_TransformReturnsJson(t *testing.T) {
-	content := `{"foo": "bar", "baz": "qux"}`
-	testJson := bytes.NewBufferString(content)
-
-	transformer := NewGojqTransformer("{test: .foo, test2: .baz, arbitary: \"waldo\"}")
-	got, err := transformer.Transform(context.Background(), testJson)
-	assert.NoError(t, err)
-
-	want := bytes.NewBufferString(`{"test": "bar", "test2": "qux", "arbitary": "waldo"}`)
-	err = testutils.NewTestJson(got, want).Compare()
-	assert.NoError(t, err)
+type TransformTester struct {
+	Transformer           Transformer
+	Content               string
+	Want                  string
+	ShouldFailOnTransform bool
+	ShouldFailOnCompare   bool
 }
 
-func TestGojqTransformer_TransformerPassedSingleValues(t *testing.T) {
-	testJson := bytes.NewBufferString(`{"foo": "bar"}`)
+func TestGojqTransformer_TransformReturnsJson(t *testing.T) {
+	tester := TransformTester{
+		Content:     `{"foo": "bar", "baz": "qux"}`,
+		Transformer: NewGojqTransformer(`{test: .foo, test2: .baz, arbitary: "waldo"}`),
+		Want:        `{"test": "bar", "test2": "qux", "arbitary": "waldo"}`,
+	}
 
-	transformer := NewGojqTransformer(".foo")
-	body, err := transformer.Transform(context.Background(), testJson)
-	assert.NoError(t, err)
+	tester.Test(t)
+}
 
-	got, err := io.ReadAll(body)
-	assert.NoError(t, err)
+func TestGojqTransformer_TransformerReturnsSingleString(t *testing.T) {
+	tester := TransformTester{
+		Content:     `{"foo": "bar"}`,
+		Transformer: NewGojqTransformer(`.foo`),
+		Want:        `bar`,
+	}
 
-	want := "bar"
-	assert.Equal(t, want, string(got))
+	result, err := tester.Transformer.Transform(context.Background(), bytes.NewBufferString(tester.Content))
+	require.NoError(t, err)
+
+	got, err := io.ReadAll(result)
+	require.NoError(t, err)
+	want := tester.Want
+	require.Equal(t, want, string(got))
 }
 
 func TestNilTransformer_TransformReturnsOriginalObject(t *testing.T) {
+	tester := TransformTester{
+		Content:     `{"foo": "bar", "baz": "qux"}`,
+		Transformer: NewNilTransformer(),
+		Want:        `{"foo": "bar", "baz": "qux"}`,
+	}
+
+	tester.Test(t)
+}
+
+func TestCustomScriptTransformer_DataInAndOut(t *testing.T) {
 	content := `{"foo": "bar", "baz": "qux"}`
 	testJson := bytes.NewBufferString(content)
 
-	transformer := NewNilTransformer()
-
+	transformer := NewCustomScriptTransformer("jq", `{test: .foo, test2: .baz, arbitary: "waldo"}`)
 	got, err := transformer.Transform(context.Background(), testJson)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	want := content
-	err = testutils.NewTestJson(got, bytes.NewBufferString(want)).Compare()
-	assert.NoError(t, err)
+	want := bytes.NewBufferString(`{"test": "bar", "test2": "qux", "arbitary": "waldo"}`)
+	err = testutils.NewTestJson(got, want).Compare()
+	require.NoError(t, err)
+}
+
+func TestTester(t *testing.T) {
+	tester := TransformTester{
+		Content:     `{"foo": "bar", "baz": "qux"}`,
+		Transformer: NewNilTransformer(),
+		Want:        `{"foo": "bar", "baz": "qux"}`,
+	}
+	tester.Test(t)
+
+	tester1 := TransformTester{
+		Content:             `{"foo": "bar", "baz": "qux"}`,
+		Transformer:         NewNilTransformer(),
+		Want:                `{"foo": "qux", "baz": "bar"}`,
+		ShouldFailOnCompare: true,
+	}
+	tester1.Test(t)
+}
+
+func (tt *TransformTester) Test(t *testing.T) {
+	testJson := bytes.NewBufferString(tt.Content)
+	got, err := tt.Transformer.Transform(context.Background(), testJson)
+	if tt.ShouldFailOnTransform {
+		require.Error(t, err)
+		return
+	}
+	require.NoError(t, err)
+
+	want := bytes.NewBufferString(tt.Want)
+	err = testutils.NewTestJson(got, want).Compare()
+	if tt.ShouldFailOnCompare {
+		require.Error(t, err)
+		return
+	}
+	require.NoError(t, err)
 }
 
 func TestMain(m *testing.M) {
